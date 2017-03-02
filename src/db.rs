@@ -20,12 +20,13 @@ use std::time;
 use rocket::request::{Outcome, FromRequest};
 use rocket::Outcome::{Success, Failure};
 use rocket::http::Status;
+use rocket::Request;
 
 
 use super::models::{ Post, NewPost };
 
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq)]
 pub enum Error {
     RecordNotFound,
     DatabaseError,
@@ -116,6 +117,18 @@ pub fn update_post(conn: &PgConnection,
 }
 
 
+pub fn get_post(conn: &PgConnection, id: i32) -> DBResult<Post> {
+    use super::schema::posts::dsl;
+
+    dsl::posts.filter(dsl::published.eq(true)).filter(dsl::id.eq(id)).get_result(conn)
+        .map(|post| post)
+        .map_err(|e| match e {
+            DieselError::NotFound => Error::RecordNotFound,
+            _ => Error::DatabaseError
+        })
+}
+
+
 pub fn publish_post(conn: &PgConnection, id: i32) -> DBResult<Post> {
     use super::schema::posts::dsl;
     diesel::update(dsl::posts.find(id))
@@ -153,28 +166,43 @@ mod test {
         let title = "title1";
         let cats = vec!["tag1".into(), "tag2".into()];
         let body = "body1";
-        
-        let post = super::create_post(conn, title, Some(&cats), body).unwrap();
+
+        let post = create_post(conn, title, Some(&cats), body).unwrap();
         assert!(post.title == title && post.category == "tag1,tag2"
                 && post.body == body && post.published == false);
         assert!(post.created == post.last_edited);
+
+        let post_id = post.id;
+
+        // Retrieve draft
+        let post = get_post(conn, post_id);
+        assert!(match post {
+            Err(Error::RecordNotFound) => true,
+            _ => false
+        });
 
         // Update
         let title = "title2";
         let body = "body2";
 
-        let post = super::update_post(conn, post.id, title, None, body).unwrap();
+        let post = update_post(conn, post_id, title, None, body).unwrap();
         println!("created: {:?}, updated: {:?}", post.created, post.last_edited);
         assert!(post.title == title && post.category == ""
                 && post.body == body && post.published == false);
         assert!(post.created < post.last_edited);
 
         // Publish
-        let post = super::publish_post(conn, post.id).unwrap();
+        let post = publish_post(conn, post_id).unwrap();
         assert!(post.published);
 
+        // Retrieve published
+        let post = get_post(conn, post_id).unwrap();
+        assert!(post.title == title && post.category == ""
+                && post.body == body && post.published == true);
+        assert!(post.created <= post.last_edited);
+
         // Delete
-        let num = super::delete_post(conn, post.id).unwrap();
+        let num = delete_post(conn, post.id).unwrap();
         assert!(num == 1);
     }
 }
