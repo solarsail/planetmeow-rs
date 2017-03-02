@@ -8,5 +8,8 @@ rocket = "0.2.0"
 rocket_codegen = "0.2.0"
 diesel = { version = "0.11.0", features = ["postgres"] }                                                                                                                                                      
 diesel_codegen = { version = "0.11.0", features = ["postgres"] }                                                                                                                                              
+r2d2 = "0.7.0"
+r2d2-diesel = "0.11.0"
 dotenv = "0.8.0"
 time = "0.1.0"
+lazy_static = "0.1.*"
