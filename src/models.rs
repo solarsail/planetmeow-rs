@@ -1,16 +1,18 @@
 use diesel::data_types::*;
+use chrono::prelude::*;
 
 
-#[derive(Queryable)]
+#[derive(Queryable, Serialize, Deserialize)]
 pub struct Post {
     pub id: i32,
     pub title: String,
     pub category: String,
     pub body: String,
-    pub created: PgTimestamp,
-    pub last_edited: PgTimestamp,
+    pub created: NaiveDateTime,
+    pub last_edited: NaiveDateTime,
     pub published: bool,
 }
+
 
 use super::schema::posts;
 

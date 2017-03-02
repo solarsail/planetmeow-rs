@@ -14,7 +14,8 @@ use dotenv::dotenv;
 use std::env;
 
 // Timestamp
-use std::time;
+use chrono::prelude::*;
+use chrono::Duration;
 
 // Provides DB access for Rocket
 use rocket::request::{Outcome, FromRequest};
@@ -99,14 +100,15 @@ pub fn update_post(conn: &PgConnection,
     use super::schema::posts::dsl;
 
     let cat = serialize_categories(categories);
-    let now = time::SystemTime::now();
-    let ts = now.duration_since(time::UNIX_EPOCH + time::Duration::from_secs(946684800/* 1970.1.1-2000.1.1 */)).unwrap();
+    let millennium= NaiveDateTime::from_timestamp(946684800, 0);
+    let now = UTC::now().naive_utc();
+    let ts = now.signed_duration_since(millennium).num_microseconds().unwrap();
     diesel::update(dsl::posts.find(id))
         .set((
                 dsl::title.eq(title),
                 dsl::category.eq(cat),
                 dsl::body.eq(body),
-                dsl::last_edited.eq(PgTimestamp(ts.as_secs() as i64 * 1000000 + ts.subsec_nanos() as i64 / 1000))
+                dsl::last_edited.eq(PgTimestamp(ts))
              ))
         .get_result(conn)
         .map(|post| post)
@@ -189,7 +191,7 @@ mod test {
         println!("created: {:?}, updated: {:?}", post.created, post.last_edited);
         assert!(post.title == title && post.category == ""
                 && post.body == body && post.published == false);
-        assert!(post.created < post.last_edited);
+        assert!(post.created < post.last_edited && post.last_edited.signed_duration_since(post.created) < Duration::milliseconds(100));
 
         // Publish
         let post = publish_post(conn, post_id).unwrap();
@@ -199,7 +201,6 @@ mod test {
         let post = get_post(conn, post_id).unwrap();
         assert!(post.title == title && post.category == ""
                 && post.body == body && post.published == true);
-        assert!(post.created <= post.last_edited);
 
         // Delete
         let num = delete_post(conn, post.id).unwrap();

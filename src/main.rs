@@ -2,13 +2,20 @@
 #![plugin(rocket_codegen)]
 
 extern crate rocket;
+#[macro_use] extern crate rocket_contrib;
+
 #[macro_use] extern crate diesel;
 #[macro_use] extern crate diesel_codegen;
-extern crate dotenv;
-extern crate time;
-#[macro_use] extern crate lazy_static;
 extern crate r2d2;
 extern crate r2d2_diesel;
+
+extern crate dotenv;
+extern crate chrono;
+#[macro_use] extern crate lazy_static;
+
+extern crate serde_json;
+#[macro_use] extern crate serde_derive;
+
 
 mod handlers;
 mod db;
