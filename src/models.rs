@@ -1,4 +1,3 @@
-use diesel::data_types::*;
 use chrono::prelude::*;
 
 
@@ -16,7 +15,7 @@ pub struct Post {
 
 use super::schema::posts;
 
-#[derive(Insertable)]
+#[derive(Insertable, Deserialize)]
 #[table_name="posts"]
 pub struct NewPost {
     pub title: String,

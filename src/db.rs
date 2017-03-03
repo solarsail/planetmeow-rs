@@ -58,7 +58,7 @@ impl<'a, 'r> FromRequest<'a, 'r> for DB {
 
 
 lazy_static! {
-    pub static ref DB_POOL: Pool<ConnectionManager<PgConnection>> = create_db_pool();
+    static ref DB_POOL: Pool<ConnectionManager<PgConnection>> = create_db_pool();
 }
 
 
@@ -119,7 +119,7 @@ pub fn update_post(conn: &PgConnection,
 }
 
 
-pub fn get_post(conn: &PgConnection, id: i32) -> DBResult<Post> {
+pub fn get_published_post(conn: &PgConnection, id: i32) -> DBResult<Post> {
     use super::schema::posts::dsl;
 
     dsl::posts.filter(dsl::published.eq(true)).filter(dsl::id.eq(id)).get_result(conn)
@@ -131,8 +131,20 @@ pub fn get_post(conn: &PgConnection, id: i32) -> DBResult<Post> {
 }
 
 
+pub fn get_published_posts(conn: &PgConnection) -> Vec<Post> {
+    use super::schema::posts::dsl;
+
+    let ret = dsl::posts.filter(dsl::published.eq(true)).load::<Post>(conn);
+    match ret {
+        Ok(v) => v,
+        _ => Vec::new()
+    }
+}
+
+
 pub fn publish_post(conn: &PgConnection, id: i32) -> DBResult<Post> {
     use super::schema::posts::dsl;
+
     diesel::update(dsl::posts.find(id))
         .set(dsl::published.eq(true))
         .get_result(conn)
@@ -191,7 +203,8 @@ mod test {
         println!("created: {:?}, updated: {:?}", post.created, post.last_edited);
         assert!(post.title == title && post.category == ""
                 && post.body == body && post.published == false);
-        assert!(post.created < post.last_edited && post.last_edited.signed_duration_since(post.created) < Duration::milliseconds(100));
+        assert!(post.created < post.last_edited);
+        assert!(post.last_edited.signed_duration_since(post.created) < Duration::milliseconds(500));
 
         // Publish
         let post = publish_post(conn, post_id).unwrap();
@@ -204,6 +217,21 @@ mod test {
 
         // Delete
         let num = delete_post(conn, post.id).unwrap();
+        assert!(num == 1);
+
+        // Batch retrieve
+        let pv1 = get_published_posts(conn);
+        let post1 = create_post(conn, "t1", Some(&cats), "b1").unwrap();
+        let post2 = create_post(conn, "t2", None, "b2").unwrap();
+        let pv2 = get_published_posts(conn);
+        assert!(pv2.len() == pv1.len());
+        let post1 = publish_post(conn, post1.id).unwrap();
+        let post2 = publish_post(conn, post2.id).unwrap();
+        let pv2 = get_published_posts(conn);
+        assert!(pv2.len() == pv1.len() + 2);
+        let num = delete_post(conn, post1.id).unwrap();
+        assert!(num == 1);
+        let num = delete_post(conn, post2.id).unwrap();
         assert!(num == 1);
     }
 }

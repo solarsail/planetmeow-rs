@@ -30,7 +30,13 @@ fn index() -> &'static str {
 
 fn main() {
     rocket::ignite()
-        .mount("/", routes![index])
+        .mount("/", routes![index,
+               handlers::post::get_all,
+               handlers::post::get,
+               handlers::post::create,
+               handlers::post::publish,
+               handlers::post::update,
+               handlers::post::delete])
         .catch(errors![handlers::errors::not_found])
         .launch();
 }
