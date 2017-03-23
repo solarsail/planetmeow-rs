@@ -97,18 +97,18 @@ pub fn create_post(conn: &PgConnection,
 
 pub fn update_post(conn: &PgConnection,
                        id: i32, title: &str, categories: Option<&Vec<String>>, body: &str) -> DBResult<Post> {
-    use super::schema::posts::dsl;
+    use super::schema::posts;
 
     let cat = serialize_categories(categories);
     let millennium= NaiveDateTime::from_timestamp(946684800, 0);
     let now = UTC::now().naive_utc();
     let ts = now.signed_duration_since(millennium).num_microseconds().unwrap();
-    diesel::update(dsl::posts.find(id))
+    diesel::update(posts::table.find(id))
         .set((
-                dsl::title.eq(title),
-                dsl::category.eq(cat),
-                dsl::body.eq(body),
-                dsl::last_edited.eq(PgTimestamp(ts))
+                posts::title.eq(title),
+                posts::category.eq(cat),
+                posts::body.eq(body),
+                posts::last_edited.eq(PgTimestamp(ts))
              ))
         .get_result(conn)
         .map(|post| post)
@@ -119,11 +119,13 @@ pub fn update_post(conn: &PgConnection,
 }
 
 
-pub fn get_post(conn: &PgConnection, id: i32, published_only: bool, non_deleted_only: bool) -> DBResult<Post> {
+pub fn get_posts(conn: &PgConnection, id: Option<i32>, published_only: bool, non_deleted_only: bool) -> Vec<Post> {
     use super::schema::posts;
 
     let mut query = posts::table.into_boxed();
-    query = query.filter(posts::id.eq(id));
+    if let Some(pid) = id {
+        query = query.filter(posts::id.eq(pid));
+    }
     if published_only {
         query = query.filter(posts::published.eq(true));
     }
@@ -131,30 +133,30 @@ pub fn get_post(conn: &PgConnection, id: i32, published_only: bool, non_deleted_
         query = query.filter(posts::deleted.eq(false));
     }
 
-    query.get_result(conn)
-         .map(|post| post)
-         .map_err(|e| match e {
-             DieselError::NotFound => Error::RecordNotFound,
-             _ => Error::DatabaseError
-         })
-}
-
-pub fn get_published_post(conn: &PgConnection, id: i32) -> DBResult<Post> {
-    get_post(conn, id, true, true)
-}
-
-
-pub fn get_published_posts(conn: &PgConnection) -> Vec<Post> {
-    use super::schema::posts::dsl;
-
-    let ret = dsl::posts
-        .filter(dsl::published.eq(true))
-        .filter(dsl::deleted.eq(false))
-        .load::<Post>(conn);
+    let ret = query.load::<Post>(conn);
     match ret {
         Ok(v) => v,
         _ => Vec::new()
     }
+}
+
+pub fn get_published_post(conn: &PgConnection, id: i32) -> DBResult<Post> {
+    let mut posts = get_posts(conn, Some(id), true, true);
+    if let Some(post) = posts.pop() {
+        Ok(post)
+    } else {
+        Err(Error::RecordNotFound)
+    }
+}
+
+
+pub fn get_published_posts(conn: &PgConnection) -> Vec<Post> {
+    get_posts(conn, None, true, true)
+}
+
+
+pub fn get_all_posts(conn: &PgConnection) -> Vec<Post> {
+    get_posts(conn, None, false, false)
 }
 
 
@@ -259,7 +261,7 @@ mod test {
         assert!(post.published);
 
         // Retrieve published
-        let post = get_post(conn, post_id, false, false).unwrap();
+        let ref post = get_posts(conn, Some(post_id), false, false)[0];
         assert!(post.title == title && post.category == ""
                 && post.body == body && post.published == true);
 
