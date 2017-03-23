@@ -5,72 +5,11 @@ use diesel::data_types::PgTimestamp;
 use diesel::result::Error as DieselError;
 use diesel::pg::PgConnection;
 
-// Connection pool
-use r2d2::{ Pool, Config, PooledConnection, GetTimeout };
-use r2d2_diesel::ConnectionManager;
-
-// Environment
-use dotenv::dotenv;
-use std::env;
-
 // Timestamp
 use chrono::prelude::*;
-use chrono::Duration;
 
-// Provides DB access for Rocket
-use rocket::request::{Outcome, FromRequest};
-use rocket::Outcome::{Success, Failure};
-use rocket::http::Status;
-use rocket::Request;
-
-
-use super::models::{ Post, NewPost, Visitor, NewVisitor, Comment, NewComment };
-
-
-#[derive(Debug, PartialEq, Eq)]
-pub enum Error {
-    RecordNotFound,
-    DatabaseError,
-}
-
-
-pub type DBResult<T> = Result<T, Error>;
-
-
-pub struct DB(PooledConnection<ConnectionManager<PgConnection>>);
-
-impl DB {
-    pub fn conn(&self) -> &PgConnection {
-        &*self.0
-    }
-}
-
-impl<'a, 'r> FromRequest<'a, 'r> for DB {
-    type Error = GetTimeout;
-
-    fn from_request(_: &'a Request<'r>) -> Outcome<Self, Self::Error> {
-        match DB_POOL.get() {
-            Ok(conn) => Success(DB(conn)),
-            Err(e) => Failure((Status::InternalServerError, e)),
-        }
-    }
-}
-
-
-lazy_static! {
-    static ref DB_POOL: Pool<ConnectionManager<PgConnection>> = create_db_pool();
-}
-
-
-fn create_db_pool() -> Pool<ConnectionManager<PgConnection>> {
-    dotenv().ok();
-
-    let database_url = env::var("DATABASE_URL")
-        .expect("DATABASE_URL must be set");
-    let config = Config::default();
-    let manager = ConnectionManager::<PgConnection>::new(database_url);
-    Pool::new(config, manager).expect("Failed to create pool.")
-}
+use models::{Post, NewPost};
+use db::{Error, DBResult};
 
 
 fn serialize_categories(cats: Option<&Vec<String>>) -> String {
@@ -78,9 +17,9 @@ fn serialize_categories(cats: Option<&Vec<String>>) -> String {
 }
 
 
-pub fn create_post(conn: &PgConnection,
+pub fn create(conn: &PgConnection,
                        title: &str, categories: Option<&Vec<String>>, body: &str) -> DBResult<Post> {
-    use super::schema::posts;
+    use schema::posts;
 
     let new_post = NewPost {
         title: title.into(),
@@ -95,9 +34,9 @@ pub fn create_post(conn: &PgConnection,
 }
 
 
-pub fn update_post(conn: &PgConnection,
+pub fn update(conn: &PgConnection,
                        id: i32, title: &str, categories: Option<&Vec<String>>, body: &str) -> DBResult<Post> {
-    use super::schema::posts;
+    use schema::posts;
 
     let cat = serialize_categories(categories);
     let millennium= NaiveDateTime::from_timestamp(946684800, 0);
@@ -119,8 +58,8 @@ pub fn update_post(conn: &PgConnection,
 }
 
 
-pub fn get_posts(conn: &PgConnection, id: Option<i32>, published_only: bool, non_deleted_only: bool) -> Vec<Post> {
-    use super::schema::posts;
+pub fn get(conn: &PgConnection, id: Option<i32>, published_only: bool, non_deleted_only: bool) -> Vec<Post> {
+    use schema::posts;
 
     let mut query = posts::table.into_boxed();
     if let Some(pid) = id {
@@ -140,28 +79,18 @@ pub fn get_posts(conn: &PgConnection, id: Option<i32>, published_only: bool, non
     }
 }
 
-pub fn get_published_post(conn: &PgConnection, id: i32) -> DBResult<Post> {
-    let mut posts = get_posts(conn, Some(id), true, true);
-    if let Some(post) = posts.pop() {
-        Ok(post)
-    } else {
-        Err(Error::RecordNotFound)
-    }
+pub fn get_published(conn: &PgConnection, id: Option<i32>) -> Vec<Post> {
+    get(conn, id, true, true)
 }
 
 
-pub fn get_published_posts(conn: &PgConnection) -> Vec<Post> {
-    get_posts(conn, None, true, true)
+pub fn get_all(conn: &PgConnection) -> Vec<Post> {
+    get(conn, None, false, false)
 }
 
 
-pub fn get_all_posts(conn: &PgConnection) -> Vec<Post> {
-    get_posts(conn, None, false, false)
-}
-
-
-pub fn publish_post(conn: &PgConnection, id: i32) -> DBResult<Post> {
-    use super::schema::posts::dsl;
+pub fn publish(conn: &PgConnection, id: i32) -> DBResult<Post> {
+    use schema::posts::dsl;
 
     diesel::update(dsl::posts.find(id))
         .set(dsl::published.eq(true))
@@ -174,8 +103,8 @@ pub fn publish_post(conn: &PgConnection, id: i32) -> DBResult<Post> {
 }
 
 
-pub fn delete_post(conn: &PgConnection, id: i32) -> DBResult<usize> {
-    use super::schema::posts::dsl;
+pub fn delete(conn: &PgConnection, id: i32) -> DBResult<usize> {
+    use schema::posts::dsl;
 
     diesel::update(dsl::posts.find(id))
             .set(dsl::deleted.eq(true))
@@ -188,8 +117,8 @@ pub fn delete_post(conn: &PgConnection, id: i32) -> DBResult<usize> {
 }
 
 
-pub fn purge_posts(conn: &PgConnection) -> DBResult<usize> {
-    use super::schema::posts::dsl;
+pub fn purge(conn: &PgConnection) -> DBResult<usize> {
+    use schema::posts::dsl;
 
     diesel::delete(dsl::posts.filter(dsl::deleted.eq(true)))
             .execute(conn)
@@ -201,37 +130,22 @@ pub fn purge_posts(conn: &PgConnection) -> DBResult<usize> {
 }
 
 
-
-pub fn create_visitor(conn: &PgConnection, name: &str, mail: &str, site: Option<String>) -> DBResult<Visitor> {
-    use super::schema::visitors;
-
-    let new_visitor = NewVisitor {
-        name: name.into(),
-        mail: mail.into(),
-        site: site,
-    };
-
-    diesel::insert(&new_visitor).into(visitors::table)
-        .get_result(conn)
-        .map(|visitor| visitor)
-        .map_err(|_| Error::DatabaseError)
-}
-
-
-
 #[cfg(test)]
 mod test {
     use super::*;
 
     #[test]
-    fn test_crud() {
+    fn test_post() {
+        use db::DB_POOL;
+        use chrono::Duration;
+
         let ref conn = DB_POOL.get().unwrap();
         // Create
         let title = "title1";
         let cats = vec!["tag1".into(), "tag2".into()];
         let body = "body1";
 
-        let post = create_post(conn, title, Some(&cats), body).unwrap();
+        let post = create(conn, title, Some(&cats), body).unwrap();
         assert!(post.title == title && post.category == "tag1,tag2"
                 && post.body == body && post.published == false);
         assert!(post.created == post.last_edited);
@@ -239,17 +153,14 @@ mod test {
         let post_id = post.id;
 
         // Retrieve draft
-        let post = get_published_post(conn, post_id);
-        assert!(match post {
-            Err(Error::RecordNotFound) => true,
-            _ => false
-        });
+        let posts = get_published(conn, Some(post_id));
+        assert!(posts.len() == 0);
 
         // Update
         let title = "title2";
         let body = "body2";
 
-        let post = update_post(conn, post_id, title, None, body).unwrap();
+        let post = update(conn, post_id, title, None, body).unwrap();
         println!("created: {:?}, updated: {:?}", post.created, post.last_edited);
         assert!(post.title == title && post.category == ""
                 && post.body == body && post.published == false);
@@ -257,36 +168,36 @@ mod test {
         assert!(post.last_edited.signed_duration_since(post.created) < Duration::milliseconds(500));
 
         // Publish
-        let post = publish_post(conn, post_id).unwrap();
+        let post = publish(conn, post_id).unwrap();
         assert!(post.published);
 
         // Retrieve published
-        let ref post = get_posts(conn, Some(post_id), false, false)[0];
+        let ref post = get(conn, Some(post_id), false, false)[0];
         assert!(post.title == title && post.category == ""
                 && post.body == body && post.published == true);
 
         // Delete
-        let num = delete_post(conn, post.id).unwrap();
+        let num = delete(conn, post.id).unwrap();
         assert!(num == 1);
-        let num = purge_posts(conn).unwrap();
+        let num = purge(conn).unwrap();
         println!("purged: {}", num);
         assert!(num == 1);
 
         // Batch retrieve
-        let pv1 = get_published_posts(conn);
-        let post1 = create_post(conn, "t1", Some(&cats), "b1").unwrap();
-        let post2 = create_post(conn, "t2", None, "b2").unwrap();
-        let pv2 = get_published_posts(conn);
+        let pv1 = get_published(conn, None);
+        let post1 = create(conn, "t1", Some(&cats), "b1").unwrap();
+        let post2 = create(conn, "t2", None, "b2").unwrap();
+        let pv2 = get_published(conn, None);
         assert!(pv2.len() == pv1.len());
-        let post1 = publish_post(conn, post1.id).unwrap();
-        let post2 = publish_post(conn, post2.id).unwrap();
-        let pv2 = get_published_posts(conn);
+        let post1 = publish(conn, post1.id).unwrap();
+        let post2 = publish(conn, post2.id).unwrap();
+        let pv2 = get_published(conn, None);
         assert!(pv2.len() == pv1.len() + 2);
-        let num = delete_post(conn, post1.id).unwrap();
+        let num = delete(conn, post1.id).unwrap();
         assert!(num == 1);
-        let num = delete_post(conn, post2.id).unwrap();
+        let num = delete(conn, post2.id).unwrap();
         assert!(num == 1);
-        let num = purge_posts(conn).unwrap();
+        let num = purge(conn).unwrap();
         assert!(num == 2);
     }
 }

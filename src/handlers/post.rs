@@ -1,23 +1,19 @@
-use rocket::Request;
 use rocket_contrib::{ JSON, Value };
-use super::super::models::Post;
-use super::super::db;
+use models::Post;
+use db::{DB, post, Error};
 
 
 
 #[get("/post")]
-pub fn get_all(db: db::DB) -> JSON<Vec<Post>> {
-    JSON(db::get_published_posts(db.conn()))
+pub fn get_all(db: DB) -> JSON<Vec<Post>> {
+    JSON(post::get_published(db.conn(), None))
 }
 
 
 #[get("/post/<id>")]
-pub fn get(db: db::DB, id: i32) -> Option<JSON<Post>> {
-    let post = db::get_published_post(db.conn(), id);
-    match post {
-        Ok(p) => Some(JSON(p)),
-        _ => None
-    }
+pub fn get(db: DB, id: i32) -> Option<JSON<Post>> {
+    let mut posts = post::get_published(db.conn(), Some(id));
+    posts.pop().map(|p| JSON(p))
 }
 
 
@@ -29,13 +25,13 @@ pub struct PostInput {
 }
 
 #[post("/post/create", format="application/json", data="<post>")]
-pub fn create(db: db::DB, post: JSON<PostInput>) -> JSON<Value> { // returns id
+pub fn create(db: DB, post: JSON<PostInput>) -> JSON<Value> { // returns id
     let cats = if post.categories.len() > 0 {
         Some(&post.categories)
     } else {
         None
     };
-    let post = db::create_post(db.conn(), &post.title, cats, &post.body);
+    let post = post::create(db.conn(), &post.title, cats, &post.body);
     match post {
         Ok(p) => JSON(json!({ "status": "ok", "id": p.id })),
         _ => JSON(json!({ "status": "database error" }))
@@ -44,38 +40,38 @@ pub fn create(db: db::DB, post: JSON<PostInput>) -> JSON<Value> { // returns id
 
 
 #[post("/post/<id>", format="application/json", data="<post>")]
-pub fn update(db: db::DB, id: i32, post: JSON<PostInput>) -> JSON<Value> { // returns id
+pub fn update(db: DB, id: i32, post: JSON<PostInput>) -> JSON<Value> { // returns id
     let cats = if post.categories.len() > 0 {
         Some(&post.categories)
     } else {
         None
     };
-    let post = db::update_post(db.conn(), id, &post.title, cats, &post.body);
+    let post = post::update(db.conn(), id, &post.title, cats, &post.body);
     match post {
         Ok(p) => JSON(json!({ "status": "ok", "id": p.id })),
-        Err(db::Error::RecordNotFound) => JSON(json!({ "status": "error", "description": "not found" })),
+        Err(Error::RecordNotFound) => JSON(json!({ "status": "error", "description": "not found" })),
         _ => JSON(json!({ "status": "error", "description": "database error" }))
     }
 }
 
 
 #[post("/post/<id>/publish")]
-pub fn publish(db: db::DB, id: i32) -> JSON<Value> {
-    let post = db::publish_post(db.conn(), id);
+pub fn publish(db: DB, id: i32) -> JSON<Value> {
+    let post = post::publish(db.conn(), id);
     match post {
-        Ok(p) => JSON(json!({ "status": "ok", "id": id })),
-        Err(db::Error::RecordNotFound) => JSON(json!({ "status": "error", "description": "not found" })),
+        Ok(_) => JSON(json!({ "status": "ok", "id": id })),
+        Err(Error::RecordNotFound) => JSON(json!({ "status": "error", "description": "not found" })),
         _ => JSON(json!({ "status": "error", "description": "database error" }))
     }
 }
 
 
 #[delete("/post/<id>")]
-pub fn delete(db: db::DB, id: i32) -> JSON<Value> {
-    let num = db::delete_post(db.conn(), id);
+pub fn delete(db: DB, id: i32) -> JSON<Value> {
+    let num = post::delete(db.conn(), id);
     match num {
-        Ok(n) => JSON(json!({ "status": "ok", "id": id })),
-        Err(db::Error::RecordNotFound) => JSON(json!({ "status": "error", "description": "not found" })),
+        Ok(_) => JSON(json!({ "status": "ok", "id": id })),
+        Err(Error::RecordNotFound) => JSON(json!({ "status": "error", "description": "not found" })),
         _ => JSON(json!({ "status": "error", "description": "database error" }))
     }
 }

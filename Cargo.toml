@@ -1,5 +1,5 @@
 [package]
-name = "planetmeow-rs"
+name = "planetmeow"
 version = "0.1.0"
 authors = ["solarsail <newleaf.lu@gmail.com>"]
 
