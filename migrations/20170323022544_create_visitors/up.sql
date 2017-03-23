@@ -1,0 +1,8 @@
+-- Your SQL goes here
+CREATE TABLE visitors (
+    id SERIAL PRIMARY KEY,
+    name VARCHAR NOT NULL,
+    mail VARCHAR NOT NULL,
+    site VARCHAR,
+    created TIMESTAMP WITHOUT TIME ZONE NOT NULL DEFAULT (NOW() AT TIME ZONE 'UTC')
+)

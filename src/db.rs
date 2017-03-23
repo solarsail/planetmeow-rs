@@ -24,7 +24,7 @@ use rocket::http::Status;
 use rocket::Request;
 
 
-use super::models::{ Post, NewPost };
+use super::models::{ Post, NewPost, Visitor, NewVisitor, Comment, NewComment };
 
 
 #[derive(Debug, PartialEq, Eq)]
@@ -119,22 +119,38 @@ pub fn update_post(conn: &PgConnection,
 }
 
 
-pub fn get_published_post(conn: &PgConnection, id: i32) -> DBResult<Post> {
-    use super::schema::posts::dsl;
+pub fn get_post(conn: &PgConnection, id: i32, published_only: bool, non_deleted_only: bool) -> DBResult<Post> {
+    use super::schema::posts;
 
-    dsl::posts.filter(dsl::published.eq(true)).filter(dsl::id.eq(id)).get_result(conn)
-        .map(|post| post)
-        .map_err(|e| match e {
-            DieselError::NotFound => Error::RecordNotFound,
-            _ => Error::DatabaseError
-        })
+    let mut query = posts::table.into_boxed();
+    query = query.filter(posts::id.eq(id));
+    if published_only {
+        query = query.filter(posts::published.eq(true));
+    }
+    if non_deleted_only {
+        query = query.filter(posts::deleted.eq(false));
+    }
+
+    query.get_result(conn)
+         .map(|post| post)
+         .map_err(|e| match e {
+             DieselError::NotFound => Error::RecordNotFound,
+             _ => Error::DatabaseError
+         })
+}
+
+pub fn get_published_post(conn: &PgConnection, id: i32) -> DBResult<Post> {
+    get_post(conn, id, true, true)
 }
 
 
 pub fn get_published_posts(conn: &PgConnection) -> Vec<Post> {
     use super::schema::posts::dsl;
 
-    let ret = dsl::posts.filter(dsl::published.eq(true)).load::<Post>(conn);
+    let ret = dsl::posts
+        .filter(dsl::published.eq(true))
+        .filter(dsl::deleted.eq(false))
+        .load::<Post>(conn);
     match ret {
         Ok(v) => v,
         _ => Vec::new()
@@ -159,7 +175,8 @@ pub fn publish_post(conn: &PgConnection, id: i32) -> DBResult<Post> {
 pub fn delete_post(conn: &PgConnection, id: i32) -> DBResult<usize> {
     use super::schema::posts::dsl;
 
-    diesel::delete(dsl::posts.filter(dsl::id.eq(id)))
+    diesel::update(dsl::posts.find(id))
+            .set(dsl::deleted.eq(true))
             .execute(conn)
             .map(|num| num)
             .map_err(|e| match e {
@@ -167,6 +184,37 @@ pub fn delete_post(conn: &PgConnection, id: i32) -> DBResult<usize> {
                 _ => Error::DatabaseError
             })
 }
+
+
+pub fn purge_posts(conn: &PgConnection) -> DBResult<usize> {
+    use super::schema::posts::dsl;
+
+    diesel::delete(dsl::posts.filter(dsl::deleted.eq(true)))
+            .execute(conn)
+            .map(|num| num)
+            .map_err(|e| match e {
+                DieselError::NotFound => Error::RecordNotFound, // FIXME: necessary?
+                _ => Error::DatabaseError
+            })
+}
+
+
+
+pub fn create_visitor(conn: &PgConnection, name: &str, mail: &str, site: Option<String>) -> DBResult<Visitor> {
+    use super::schema::visitors;
+
+    let new_visitor = NewVisitor {
+        name: name.into(),
+        mail: mail.into(),
+        site: site,
+    };
+
+    diesel::insert(&new_visitor).into(visitors::table)
+        .get_result(conn)
+        .map(|visitor| visitor)
+        .map_err(|_| Error::DatabaseError)
+}
+
 
 
 #[cfg(test)]
@@ -189,7 +237,7 @@ mod test {
         let post_id = post.id;
 
         // Retrieve draft
-        let post = get_post(conn, post_id);
+        let post = get_published_post(conn, post_id);
         assert!(match post {
             Err(Error::RecordNotFound) => true,
             _ => false
@@ -211,12 +259,15 @@ mod test {
         assert!(post.published);
 
         // Retrieve published
-        let post = get_post(conn, post_id).unwrap();
+        let post = get_post(conn, post_id, false, false).unwrap();
         assert!(post.title == title && post.category == ""
                 && post.body == body && post.published == true);
 
         // Delete
         let num = delete_post(conn, post.id).unwrap();
+        assert!(num == 1);
+        let num = purge_posts(conn).unwrap();
+        println!("purged: {}", num);
         assert!(num == 1);
 
         // Batch retrieve
@@ -233,5 +284,7 @@ mod test {
         assert!(num == 1);
         let num = delete_post(conn, post2.id).unwrap();
         assert!(num == 1);
+        let num = purge_posts(conn).unwrap();
+        assert!(num == 2);
     }
 }

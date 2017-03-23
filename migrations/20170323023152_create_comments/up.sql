@@ -1,11 +1,10 @@
 -- Your SQL goes here
-CREATE TABLE posts (
+CREATE TABLE comments (
     id SERIAL PRIMARY KEY,
-    title VARCHAR NOT NULL,
-    category VARCHAR NOT NULL DEFAULT '',
+    vid INT REFERENCES visitors(id),
+    pid INT REFERENCES posts(id),
     body TEXT NOT NULL,
     created TIMESTAMP WITHOUT TIME ZONE NOT NULL DEFAULT (NOW() AT TIME ZONE 'UTC'),
     last_edited TIMESTAMP WITHOUT TIME ZONE NOT NULL DEFAULT (NOW() AT TIME ZONE 'UTC'),
-    published BOOLEAN NOT NULL DEFAULT 'f',
     deleted BOOLEAN NOT NULL DEFAULT 'f'
 )
