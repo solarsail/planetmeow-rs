@@ -18,6 +18,7 @@ use rocket::Request;
 
 pub mod post;
 pub mod visitor;
+pub mod comment;
 
 
 #[derive(Debug, PartialEq, Eq)]
