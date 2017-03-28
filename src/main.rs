@@ -36,7 +36,13 @@ fn main() {
                handlers::post::create,
                handlers::post::publish,
                handlers::post::update,
-               handlers::post::delete])
+               handlers::post::delete,
+               handlers::visitor::get_all,
+               handlers::visitor::get,
+               handlers::visitor::create,
+               handlers::visitor::update,
+               handlers::visitor::delete,
+               ])
         .catch(errors![handlers::errors::not_found])
         .launch();
 }
