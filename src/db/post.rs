@@ -133,6 +133,7 @@ pub fn purge(conn: &PgConnection) -> DBResult<usize> {
 #[cfg(test)]
 mod test {
     use super::*;
+    use std::{thread, time};
 
     #[test]
     fn test_post() {
@@ -180,15 +181,18 @@ mod test {
         let num = delete(conn, post.id).unwrap();
         assert!(num == 1);
         let num = purge(conn).unwrap();
-        println!("purged: {}", num);
-        assert!(num == 1);
+        assert!(num == 1, "purged: {} != 1", num);
+
+        // Wait for db commit; FIXME: use transaction
+        let cent_millis = time::Duration::from_millis(100);
+        thread::sleep(cent_millis);
 
         // Batch retrieve
         let pv1 = get_published(conn, None);
         let post1 = create(conn, "t1", Some(&cats), "b1").unwrap();
         let post2 = create(conn, "t2", None, "b2").unwrap();
         let pv2 = get_published(conn, None);
-        assert!(pv2.len() == pv1.len());
+        assert!(pv2.len() == pv1.len(), "pv1: {:?}, pv2: {:?}", pv1, pv2);
         let post1 = publish(conn, post1.id).unwrap();
         let post2 = publish(conn, post2.id).unwrap();
         let pv2 = get_published(conn, None);

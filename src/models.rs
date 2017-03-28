@@ -1,7 +1,7 @@
 use chrono::prelude::*;
 
 
-#[derive(Queryable, Serialize, Deserialize)]
+#[derive(Queryable, Serialize, Deserialize, Debug)]
 pub struct Post {
     pub id: i32,
     pub title: String,

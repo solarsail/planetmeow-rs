@@ -13,11 +13,10 @@ use models::{Comment, NewComment};
 use db::{Error, DBResult};
 
 
-pub fn create(conn: &PgConnection,
-                       post: &Post, visitor: &Visitor, body: &str) -> DBResult<Comment> {
+pub fn create(conn: &PgConnection, pid: i32, vid: i32, body: &str) -> DBResult<Comment> {
     let new_cmt = NewComment {
-        pid: post.id,
-        vid: visitor.id,
+        pid: pid,
+        vid: vid,
         body: body.into(),
     };
 
@@ -106,9 +105,12 @@ mod test {
         let post = post::create(conn, title, Some(&cats), body).unwrap();
         let post = post::publish(conn, post.id).unwrap();
 
+        let body = "comment body";
         let visitor = visitor::create(conn, "visitor1", "test@test.com", None).unwrap();
-        let comment = create(conn, post, visitor, "comment").unwrap();
-        assert!(comment.body == "comment" && comment.pid == post.id && comment.vid == visitor.id);
+        let comment = create(conn, post.id, visitor.id, body).unwrap();
+        assert!(comment.body == body);
+        assert!(comment.vid == visitor.id, "vid: {}, visitor id: {}", comment.vid, visitor.id);
+        assert!(comment.pid == post.id, "pid: {}, post id: {}", comment.pid, post.id);
 
         // Delete
         let num = delete(conn, comment.id).unwrap();

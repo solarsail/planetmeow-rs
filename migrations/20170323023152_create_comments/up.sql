@@ -1,8 +1,8 @@
 -- Your SQL goes here
 CREATE TABLE comments (
     id SERIAL PRIMARY KEY,
-    vid INT REFERENCES visitors(id),
-    pid INT REFERENCES posts(id),
+    pid INT REFERENCES posts(id) NOT NULL,
+    vid INT REFERENCES visitors(id) NOT NULL,
     body TEXT NOT NULL,
     created TIMESTAMP WITHOUT TIME ZONE NOT NULL DEFAULT (NOW() AT TIME ZONE 'UTC'),
     last_edited TIMESTAMP WITHOUT TIME ZONE NOT NULL DEFAULT (NOW() AT TIME ZONE 'UTC'),
