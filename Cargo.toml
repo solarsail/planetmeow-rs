@@ -8,7 +8,7 @@ rocket = "0.2.0"
 rocket_codegen = "0.2.0"
 
 r2d2 = "0.7.0"
-r2d2-diesel = "0.11.0"
+r2d2-diesel = "0.12.0"
 
 dotenv = "0.8.0"
 lazy_static = "0.1.*"
@@ -18,11 +18,11 @@ serde_json = "0.9"
 serde_derive = "0.9"
 
 [dependencies.diesel]
-version = "0.11.0"
+version = "0.12.0"
 features = ["postgres", "chrono"]
 
 [dependencies.diesel_codegen]
-version = "0.11.0"
+version = "0.12.0"
 features = ["postgres"]
 
 [dependencies.rocket_contrib]

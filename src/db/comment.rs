@@ -2,6 +2,7 @@
 use diesel;
 use diesel::prelude::*;
 use diesel::data_types::PgTimestamp;
+use diesel::result::DatabaseErrorKind;
 use diesel::result::Error as DieselError;
 use diesel::pg::PgConnection;
 
@@ -23,7 +24,10 @@ pub fn create(conn: &PgConnection, pid: i32, vid: i32, body: &str) -> DBResult<C
     diesel::insert(&new_cmt).into(comments::table)
         .get_result(conn)
         .map(|cmt| cmt)
-        .map_err(|_| Error::DatabaseError)
+        .map_err(|e| match e {
+            DieselError::DatabaseError(DatabaseErrorKind::ForeignKeyViolation, _) => Error::ForeignKeyViolation,
+            _ => Error::DatabaseError
+        })
 }
 
 
@@ -40,6 +44,7 @@ pub fn update(conn: &PgConnection, id: i32, body: &str) -> DBResult<Comment> {
         .map(|post| post)
         .map_err(|e| match e {
             DieselError::NotFound => Error::RecordNotFound,
+            DieselError::DatabaseError(DatabaseErrorKind::ForeignKeyViolation, _) => Error::ForeignKeyViolation,
             _ => Error::DatabaseError
         })
 }

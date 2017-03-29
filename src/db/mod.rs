@@ -24,6 +24,9 @@ pub mod comment;
 #[derive(Debug, PartialEq, Eq)]
 pub enum Error {
     RecordNotFound,
+    ForeignKeyViolation,
+    UniqueViolation,
+    UnableToSendCommand,
     DatabaseError,
 }
 

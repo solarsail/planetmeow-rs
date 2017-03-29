@@ -42,6 +42,11 @@ fn main() {
                handlers::visitor::create,
                handlers::visitor::update,
                handlers::visitor::delete,
+               handlers::comment::get_all,
+               handlers::comment::get,
+               handlers::comment::create,
+               handlers::comment::update,
+               handlers::comment::delete,
                ])
         .catch(errors![handlers::errors::not_found])
         .launch();
